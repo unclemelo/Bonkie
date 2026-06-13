@@ -1,0 +1,17 @@
+.env
+cogs/__pycache__
+data/__pycache__
+util/__pycache__
+data/royal_stats.json
+venv/
+bot_errors.log
+data/deathlog.json
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.ruff_cache/
