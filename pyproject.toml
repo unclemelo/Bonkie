@@ -1,7 +1,7 @@
 [project]
-name = "nari"
-version = "2.0.0"
-description = "Nari Discord bot"
+name = "bonkie"
+version = "0.3.0"
+description = "Bonkie Discord bot"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -21,3 +21,7 @@ dev = [
     "ruff",
     "pyright",
 ]
+
+[tool.pyright]
+pythonVersion = "3.10"
+typeCheckingMode = "basic"

@@ -22,12 +22,10 @@ jobs:
           python-version-file: ".python-version"
 
       - name: Install the project
-        run: uv sync --locked --all-extras --dev
+        run: uv sync --locked --all-extras
 
       - name: Run Ruff check
-        uses: astral-sh/ruff-action@v3
-        with:
-          args: check
-      
+        run: uv run ruff check .
+
       - name: Run Pyright
         run: uv run pyright .

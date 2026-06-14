@@ -178,7 +178,7 @@ class ErrorHandler(commands.Cog):
 
         payload = {
             "content": content,
-            "username": "Nari Console",
+            "username": "Bonkie Console",
             "avatar_url": "https://www.setra.com/hubfs/Sajni/crc_error.jpg",
         }
 
