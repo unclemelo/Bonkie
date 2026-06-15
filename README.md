@@ -10,8 +10,7 @@ A Discord bot for server-wide knockout battles. Players use slash commands to kn
 - **Revive system** — Clear game-applied timeouts and earn XP; moderator timeouts are protected
 - **Stats & leaderboards** — Global kills, deaths, revives, K/D ratio, XP, levels (max 15), prestige tiers, and worldwide rankings
 - **Booster cooldowns** — Nitro boosters get a 30% shorter cooldown on knockout and revive
-- **Error reporting** — Unexpected errors are logged locally and optionally sent to a Discord webhook
-- **Developer tools** — Git pull, dependency sync, cog reload, and restart commands (role-restricted)
+- **Terminal logging** — Errors print cleanly in the console when running the bot locally
 
 ## Commands
 
@@ -22,12 +21,6 @@ A Discord bot for server-wide knockout battles. Players use slash commands to kn
 | `/stats [member]` | View global knockout stats, XP progress, and prestige. Works in DMs. Shows a prestige button at max level. |
 | `/leaderboard [sort_by]` | View the global top 10 players across all servers. Sort by `kills`, `level`, `prestige`, or `xp`. |
 | `/help` | Show command help and support links. |
-| `/update` | Pull latest code from GitHub, sync dependencies, and restart. *(Developers only)* |
-| `/update_commits` | View the 5 most recent commits. *(Developers only)* |
-| `/update_test` | Fetch and show git status without restarting. *(Developers only)* |
-| `/update_reload` | Reload all cogs without a full restart. *(Developers only)* |
-| `/update_status` | Show current git branch and commit. |
-| `/update_info` | Show recent commits and version info. |
 
 The legacy prefix `n!` is configured but slash commands are the primary interface.
 
@@ -69,10 +62,9 @@ Create a `.env` file in the project root:
 
 ```env
 TOKEN=your_discord_bot_token
-WEBHOOK=https://discord.com/api/webhooks/...   # optional — error notifications
 ```
 
-`TOKEN` is required. `WEBHOOK` is optional; without it, errors are only written to `bot_errors.log`.
+`TOKEN` is required.
 
 ### 3. Run the bot
 
@@ -101,8 +93,7 @@ Bonkie/
 │   ├── knockout.py         # /knockout and /revive game logic
 │   ├── stats.py            # /stats and /leaderboard
 │   ├── help.py             # /help command and support links
-│   ├── error_handler.py    # Global slash-command and uncaught error handling
-│   └── updater.py          # Developer update/reload commands
+│   └── error_handler.py    # Terminal error logging for slash commands
 ├── utils/
 │   └── booster_cooldown.py # Cooldown manager with Nitro booster discount
 ├── data/
@@ -127,10 +118,6 @@ Bonkie/
 ### Weapons (`data/weapons.json`)
 
 Each weapon entry defines a title, timeout duration (seconds or list), XP multiplier, GIF URL, and flavor text for hit, crit, and miss outcomes. The `garande_hug` weapon has a lower selection weight. The `nuke` weapon is excluded from random selection.
-
-### Developer role
-
-Update commands in `cogs/updater.py` check for `DEV_ROLE_ID`. Set this to your server's developer role ID, or `0` to allow any user.
 
 ## Game mechanics
 

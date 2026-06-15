@@ -1,120 +1,102 @@
 import discord
 import traceback
-import logging
 import sys
-import os
-import asyncio
-import aiohttp
+from datetime import datetime
 from discord import app_commands, Interaction
 from discord.ext import commands
 from colorama import Fore, Style, init
-from dotenv import load_dotenv
 from typing import Type
 from utils.console import configure_console_encoding
 
 configure_console_encoding()
-load_dotenv()
-WEBHOOK_URL = os.getenv("WEBHOOK")
-
 init(autoreset=True)
-
-# ----------------------------
-# Logging (configured once)
-# ----------------------------
-logger = logging.getLogger("discord_bot")
-logger.setLevel(logging.INFO)
-
-if not logger.handlers:
-    formatter = logging.Formatter(
-        "%(asctime)s [%(levelname)s] %(message)s",
-        "%Y-%m-%d %H:%M:%S",
-    )
-
-    file_handler = logging.FileHandler("bot_errors.log", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-
-    stream_handler = logging.StreamHandler(sys.__stdout__)
-    stream_handler.setFormatter(formatter)
-
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
 
 
 class ErrorHandler(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.bot.tree.on_error = self.on_app_command_error
-
         sys.excepthook = self.handle_uncaught_exception
-        self._last_webhook_send = 0.0  # rate limit webhook spam
 
-    # ----------------------------
-    # Slash command error handler
-    # ----------------------------
+    @staticmethod
+    def _timestamp() -> str:
+        return datetime.now().strftime("%H:%M:%S")
+
+    def log_terminal(self, tag: str, message: str, *, color=Fore.WHITE):
+        print(
+            f"{Fore.BLACK}[{self._timestamp()}]{Style.RESET_ALL} "
+            f"{tag} {color}{message}{Style.RESET_ALL}"
+        )
+
+    def log_command_error(
+        self,
+        *,
+        command: str,
+        user: discord.abc.User,
+        guild: str,
+        error_type: str,
+        error: Exception,
+        expected: bool,
+    ):
+        if expected:
+            self.log_terminal(
+                Fore.YELLOW + "[WARN]",
+                f"/{command} blocked for {user} ({user.id}) in {guild}: {error_type} — {error}",
+            )
+            return
+
+        trace = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        self.log_terminal(Fore.RED + Style.BRIGHT + "[ERROR]", f"/{command} failed in {guild}")
+        print(
+            f"{Fore.CYAN}User:{Style.RESET_ALL} {user} ({user.id})\n"
+            f"{Fore.CYAN}Type:{Style.RESET_ALL} {error_type}\n"
+            f"{Fore.CYAN}Message:{Style.RESET_ALL} {error}\n"
+            f"{Fore.MAGENTA}Traceback:{Style.RESET_ALL}\n{trace}"
+        )
+
     async def on_app_command_error(self, interaction: Interaction, error: Exception):
-        # Unwrap invoke errors
         if isinstance(error, app_commands.CommandInvokeError):
             error = error.original
 
-        error_type = type(error).__name__
-        trace = "".join(traceback.format_exception(type(error), error, error.__traceback__))
-
-        user_message = self.get_user_message(error)
-
-        # Respond safely
-        await self.safe_respond(interaction, user_message)
-
-        # Context info
-        user = interaction.user
-        command = interaction.command.name if interaction.command else "Unknown"
+        command = interaction.command.name if interaction.command else "unknown"
         guild = interaction.guild.name if interaction.guild else "DMs"
+        expected = self.is_expected_error(error)
 
-        # Console output
-        print(
-            f"\n{Fore.RED}{Style.BRIGHT}[SLASH ERROR] {Fore.YELLOW}{error_type}\n"
-            f"{Fore.CYAN}Command: {Fore.WHITE}/{command}\n"
-            f"{Fore.CYAN}User: {Fore.WHITE}{user} ({user.id})\n"
-            f"{Fore.CYAN}Guild: {Fore.WHITE}{guild}\n"
-            f"{Fore.MAGENTA}Traceback:\n{Fore.WHITE}{trace}"
+        self.log_command_error(
+            command=command,
+            user=interaction.user,
+            guild=guild,
+            error_type=type(error).__name__,
+            error=error,
+            expected=expected,
         )
 
-        logger.error(f"[SLASH ERROR] {error_type} in /{command}\n{trace}")
+        await self.safe_respond(interaction, self.get_user_message(error, expected=expected))
 
-        # Only webhook unexpected errors
-        if not self.is_expected_error(error):
-            await self.send_to_webhook(
-                f"**[SLASH ERROR]** `{error_type}` in `/{command}`\n```py\n{trace[:1900]}\n```"
-            )
-
-    # ----------------------------
-    # Error classification
-    # ----------------------------
-    def get_user_message(self, error: Exception) -> str:
+    def get_user_message(self, error: Exception, *, expected: bool) -> str:
         error_map: dict[Type[Exception], str] = {
-            app_commands.CommandOnCooldown:
-                "⌛ This command is on cooldown. Try again later.",
-            app_commands.MissingPermissions:
-                "🚫 You do not have permission to use this command.",
-            app_commands.BotMissingPermissions:
-                "⚠️ I’m missing required permissions.",
-            app_commands.NoPrivateMessage:
-                "📵 This command can’t be used in DMs.",
-            app_commands.CheckFailure:
-                "❌ You don’t meet the requirements for this command.",
+            app_commands.CommandOnCooldown: "This command is on cooldown. Try again later.",
+            app_commands.MissingPermissions: "You do not have permission to use this command.",
+            app_commands.BotMissingPermissions: "I'm missing required permissions.",
+            app_commands.NoPrivateMessage: "This command can't be used in DMs.",
+            app_commands.CheckFailure: "You don't meet the requirements for this command.",
         }
 
         if isinstance(error, app_commands.MissingRole):
-            return f"🔐 You must have the `{error.missing_role}` role."
+            return f"You must have the `{error.missing_role}` role."
 
         if isinstance(error, app_commands.MissingAnyRole):
             roles = ", ".join(f"`{r}`" for r in error.missing_roles)
-            return f"🔐 You need one of these roles: {roles}"
+            return f"You need one of these roles: {roles}"
 
         for exc, message in error_map.items():
             if isinstance(error, exc):
                 return message
 
-        return "❌ An unexpected error occurred. The developers have been notified.\nIf you wanna give us more details feel free to join our support server\nhttps://discord.gg/Jd5kSsvb56"
+        if expected:
+            return "That command could not be completed."
+
+        return "Something went wrong while running that command."
 
     def is_expected_error(self, error: Exception) -> bool:
         return isinstance(
@@ -130,9 +112,6 @@ class ErrorHandler(commands.Cog):
             ),
         )
 
-    # ----------------------------
-    # Safe interaction responses
-    # ----------------------------
     async def safe_respond(self, interaction: Interaction, message: str):
         try:
             if interaction.response.is_done():
@@ -142,55 +121,14 @@ class ErrorHandler(commands.Cog):
         except discord.HTTPException:
             pass
 
-    # ----------------------------
-    # Uncaught exceptions
-    # ----------------------------
     def handle_uncaught_exception(self, exctype, value, tb):
         if exctype is KeyboardInterrupt:
-            print(f"{Fore.YELLOW}[!] KeyboardInterrupt — shutting down cleanly.")
+            self.log_terminal(Fore.YELLOW + "[WARN]", "KeyboardInterrupt — shutting down cleanly.")
             return
 
         trace = "".join(traceback.format_exception(exctype, value, tb))
-
-        print(
-            f"\n{Fore.RED}{Style.BRIGHT}[CRITICAL ERROR] {Fore.YELLOW}{exctype.__name__}\n"
-            f"{Fore.MAGENTA}Traceback:\n{Fore.WHITE}{trace}"
-        )
-
-        logger.critical(f"Uncaught exception:\n{trace}")
-
-        asyncio.create_task(
-            self.send_to_webhook(
-                f"**[CRITICAL ERROR]** `{exctype.__name__}`\n```py\n{trace[:1900]}\n```"
-            )
-        )
-
-    # ----------------------------
-    # Async webhook sender
-    # ----------------------------
-    async def send_to_webhook(self, content: str):
-        if not WEBHOOK_URL:
-            return
-
-        # simple rate limit (1 message / 5s)
-        now = asyncio.get_event_loop().time()
-        if now - self._last_webhook_send < 5:
-            return
-        self._last_webhook_send = now
-
-        payload = {
-            "content": content,
-            "username": "Bonkie Console",
-            "avatar_url": "https://www.setra.com/hubfs/Sajni/crc_error.jpg",
-        }
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(WEBHOOK_URL, json=payload) as resp:
-                    if resp.status >= 400:
-                        logger.error(f"Webhook failed with status {resp.status}")
-        except Exception as e:
-            logger.error(f"Failed to send webhook: {e}")
+        self.log_terminal(Fore.MAGENTA + Style.BRIGHT + "[CRITICAL]", f"Uncaught {exctype.__name__}: {value}")
+        print(f"{Fore.MAGENTA}Traceback:{Style.RESET_ALL}\n{trace}")
 
 
 async def setup(bot: commands.Bot):
