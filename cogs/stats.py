@@ -1,25 +1,21 @@
 import discord
-import json
 import os
 from discord.ext import commands
 from discord import app_commands
+from utils.files import read_json, write_json
 
 DATA_FILE = "data/royal_stats.json"
 
 def load_data():
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w") as f:
-            json.dump({}, f)
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+        write_json(DATA_FILE, {})
+    return read_json(DATA_FILE)
 
 def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    write_json(DATA_FILE, data)
 
 
-# === Prestige System ===
 PRESTIGE_TIERS = [
     ("Bronze", "🥉", discord.Color.dark_orange()),
     ("Silver", "🥈", discord.Color.light_grey()),
@@ -42,6 +38,7 @@ class PrestigeButton(discord.ui.View):
             await interaction.response.send_message("This isn’t your prestige menu!", ephemeral=True)
             return
 
+        self.cog.reload_data()
         user = self.cog.get_user(self.user_id)
         if user["level"] < self.cog.max_level:
             await interaction.response.send_message("You haven’t reached max level yet!", ephemeral=True)
@@ -63,14 +60,33 @@ class PrestigeButton(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
-class RoyalStats(commands.Cog):
+class Stats(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.data = load_data()
         self.max_level = 15
-        self.global_xp_multiplier = 1.5  # make leveling easier
+        self.global_xp_multiplier = 1.5
 
-    # --- Helpers ---
+    def reload_data(self):
+        self.data = load_data()
+
+    @staticmethod
+    def format_user_name(user: discord.abc.User) -> str:
+        if isinstance(user, discord.Member):
+            return user.display_name
+        return user.global_name or user.name
+
+    async def resolve_user_name(self, user_id: int) -> str:
+        cached = self.bot.get_user(user_id)
+        if cached is not None:
+            return self.format_user_name(cached)
+
+        try:
+            fetched = await self.bot.fetch_user(user_id)
+            return self.format_user_name(fetched)
+        except (discord.NotFound, discord.HTTPException):
+            return f"User {user_id}"
+
     def get_user(self, user_id: int):
         uid = str(user_id)
         if uid not in self.data:
@@ -86,7 +102,7 @@ class RoyalStats(commands.Cog):
 
     def add_xp(self, user_id: int, amount: int):
         user = self.get_user(user_id)
-        amount = int(amount * self.global_xp_multiplier)  # easier leveling
+        amount = int(amount * self.global_xp_multiplier)
         user["xp"] += amount
         msg = None
 
@@ -104,10 +120,9 @@ class RoyalStats(commands.Cog):
         return msg
 
     def xp_needed(self, level: int):
-        return 60 + (level * 12)  # mild scaling — easier leveling
+        return 60 + (level * 12)
 
     def get_prestige_tier(self, prestige: int):
-        """Return (title, emoji, color) based on prestige tier."""
         if prestige == 0:
             return ("Unranked", "—", discord.Color.light_grey())
         index = min(prestige // 2, len(PRESTIGE_TIERS) - 1)
@@ -117,13 +132,13 @@ class RoyalStats(commands.Cog):
         filled = int((current / needed) * length)
         return "█" * filled + "░" * (length - filled)
 
-    # --- Commands ---
-    @app_commands.command(name="royalstats", description="Check your Royal stats and prestige progress.")
-    async def royalstats(
+    @app_commands.command(name="stats", description="View your global knockout stats, XP, and prestige progress.")
+    async def stats(
         self,
         interaction: discord.Interaction,
         member: discord.Member | discord.User | None = None,
     ):
+        self.reload_data()
         target: discord.abc.User = member or interaction.user
         user = self.get_user(target.id)
 
@@ -134,10 +149,10 @@ class RoyalStats(commands.Cog):
 
         title, emoji, color = self.get_prestige_tier(prestige)
         progress_bar = self.xp_bar(xp, self.xp_needed(level))
-        display_name = target.display_name if isinstance(target, discord.Member) else target.name
+        display_name = self.format_user_name(target)
 
         embed = discord.Embed(
-            title=f"{emoji} {display_name}'s Royal Stats",
+            title=f"{emoji} {display_name}'s Global Stats",
             description=f"**Prestige:** {title} {prestige_stars or '—'}",
             color=color
         )
@@ -157,45 +172,40 @@ class RoyalStats(commands.Cog):
         else:
             await interaction.response.send_message(embed=embed)
 
-    # --- Leaderboard Command ---
-    @app_commands.command(name="royalleaderboard", description="View the top Royal warriors.")
+    @app_commands.command(name="leaderboard", description="View the global top players across all servers.")
+    @app_commands.describe(sort_by="What stat to rank players by")
+    @app_commands.choices(sort_by=[
+        app_commands.Choice(name="Kills", value="kills"),
+        app_commands.Choice(name="Level", value="level"),
+        app_commands.Choice(name="Prestige", value="prestige"),
+        app_commands.Choice(name="XP", value="xp"),
+    ])
     async def leaderboard(self, interaction: discord.Interaction, sort_by: str = "kills"):
-        """Display top players sorted by kills, level, or prestige."""
-        valid = ["kills", "level", "prestige", "xp"]
-        if sort_by not in valid:
-            return await interaction.response.send_message(
-                f"Invalid sort key! Choose one of: `{', '.join(valid)}`", ephemeral=True
-            )
+        await interaction.response.defer()
 
+        self.reload_data()
         sorted_users = sorted(self.data.items(), key=lambda x: x[1].get(sort_by, 0), reverse=True)
         top = sorted_users[:10]
 
         if not top:
-            return await interaction.response.send_message("No stats recorded yet!", ephemeral=True)
+            return await interaction.followup.send("No stats recorded yet!", ephemeral=True)
 
         desc = []
-        if interaction.guild is None:
-            return await interaction.response.send_message(
-                "This command can only be used in a server.",
-                ephemeral=True,
-            )
-
-        for i, (uid, stats) in enumerate(top, 1):
-            user = interaction.guild.get_member(int(uid))
-            name = user.display_name if user else f"User {uid}"
-            title, emoji, _ = self.get_prestige_tier(stats.get("prestige", 0))
+        for i, (uid, player_stats) in enumerate(top, 1):
+            name = await self.resolve_user_name(int(uid))
+            title, emoji, _ = self.get_prestige_tier(player_stats.get("prestige", 0))
             desc.append(
                 f"**#{i}** — {name} {emoji}\n"
-                f"> 🗡️ {stats.get('kills',0)} kills | 📈 Lvl {stats.get('level',1)} | ⭐ {stats.get('prestige',0)}"
+                f"> 🗡️ {player_stats.get('kills', 0)} kills | 📈 Lvl {player_stats.get('level', 1)} | ⭐ {player_stats.get('prestige', 0)}"
             )
 
         embed = discord.Embed(
-            title=f"🏆 Royal Leaderboard — Sorted by {sort_by.title()}",
+            title=f"🌍 Global Leaderboard — Sorted by {sort_by.title()}",
             description="\n\n".join(desc),
             color=discord.Color.gold()
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(RoyalStats(bot))
+    await bot.add_cog(Stats(bot))

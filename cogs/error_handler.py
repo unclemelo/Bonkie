@@ -10,7 +10,9 @@ from discord.ext import commands
 from colorama import Fore, Style, init
 from dotenv import load_dotenv
 from typing import Type
+from utils.console import configure_console_encoding
 
+configure_console_encoding()
 load_dotenv()
 WEBHOOK_URL = os.getenv("WEBHOOK")
 

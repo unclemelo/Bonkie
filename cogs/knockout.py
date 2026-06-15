@@ -1,14 +1,13 @@
 import discord
 import random
 import asyncio
-import json
 import os
 from typing import Any, Optional
 from discord.ext import commands, tasks
 from discord import app_commands
 from datetime import datetime, timedelta
-from utils.command_checks import command_enabled
 from utils.booster_cooldown import BoosterCooldownManager
+from utils.files import read_json, write_json
 
 # === Configuration ===
 CONFIG_FILE = "data/royale_config.json"
@@ -24,11 +23,9 @@ DEFAULT_CONFIG = {
 
 if not os.path.exists(CONFIG_FILE):
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(DEFAULT_CONFIG, f, indent=4)
+    write_json(CONFIG_FILE, DEFAULT_CONFIG)
 
-with open(CONFIG_FILE, "r") as f:
-    config = json.load(f)
+config = read_json(CONFIG_FILE)
 
 # Cooldowns
 cooldown_knockout = BoosterCooldownManager(rate=1, per=config.get("knockout_cooldown", 900), bucket_type="user")
@@ -113,32 +110,25 @@ class Knockout(commands.Cog):
     def load_stats(self):
         os.makedirs(os.path.dirname(STATS_FILE), exist_ok=True)
         if not os.path.exists(STATS_FILE):
-            with open(STATS_FILE, "w") as f:
-                json.dump({}, f)
-        with open(STATS_FILE, "r") as f:
-            return json.load(f)
+            write_json(STATS_FILE, {})
+        return read_json(STATS_FILE)
 
     def save_stats(self):
-        with open(STATS_FILE, "w") as f:
-            json.dump(self.stats, f, indent=4)
+        write_json(STATS_FILE, self.stats)
 
     def load_weapons(self):
         if not os.path.exists(WEAPON_FILE):
             raise FileNotFoundError(f"Weapon file missing: {WEAPON_FILE}")
-        with open(WEAPON_FILE, "r") as f:
-            return json.load(f)
+        return read_json(WEAPON_FILE)
 
     def load_deathlog(self):
         os.makedirs(os.path.dirname(DEATHLOG_FILE), exist_ok=True)
         if not os.path.exists(DEATHLOG_FILE):
-            with open(DEATHLOG_FILE, "w") as f:
-                json.dump({}, f)
-        with open(DEATHLOG_FILE, "r") as f:
-            return json.load(f)
+            write_json(DEATHLOG_FILE, {})
+        return read_json(DEATHLOG_FILE)
 
     def save_deathlog(self):
-        with open(DEATHLOG_FILE, "w") as f:
-            json.dump(self.deathlog, f, indent=4)
+        write_json(DEATHLOG_FILE, self.deathlog)
 
     # === Stats Management ===
     def get_user(self, user_id):
@@ -232,9 +222,13 @@ class Knockout(commands.Cog):
         await self.bot.wait_until_ready()
 
     @app_commands.command(name="knockout", description="Knock someone out with a random weapon!")
-    @command_enabled()
     async def knockoutcmd(self, interaction: discord.Interaction, member: discord.Member):
         import random
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can only be used in a server.", ephemeral=True
+            )
 
         await interaction.response.defer(thinking=True, ephemeral=False)
 
@@ -334,20 +328,28 @@ class Knockout(commands.Cog):
 
         try:
             ok = await try_timeout(member, duration, "Knockout!")
-            if not ok:
-                embed.title = "🚫 Target Protected!"
-                embed.description = f"{member.mention} resisted the attack!"
-                self.add_kill(interaction.user.id)
-                self.add_death(member.id)
-                embed.set_image(url="https://media.discordapp.net/attachments/1308048258337345609/1435509129136439428/nope-anime.gif")
-                embed.set_footer(text=f"🕐 Cooldown: {config.get('knockout_cooldown', 900)//60} min")
-                return await interaction.followup.send(embed=embed)
-
-            # XP and stats
             xp_gain = int(random.randint(20 if crit else 10, 35 if crit else 25) * xp_multi)
             leveled = self.add_xp(interaction.user.id, xp_gain)
             self.add_kill(interaction.user.id)
             self.add_death(member.id)
+
+            if not ok:
+                embed.title = "🚫 Target Protected!"
+                embed.description = (
+                    f"{interaction.user.mention} landed a hit on {member.mention}, "
+                    f"but they're protected and couldn't be timed out!\n"
+                    f"> {random.choice(weapon.get('lines', ['Hit!']))}"
+                )
+                embed.add_field(name="🏅 XP Gained", value=f"**+{xp_gain} XP**", inline=False)
+                if leveled:
+                    embed.add_field(
+                        name="🆙 Level Up!",
+                        value=f"{interaction.user.mention} reached **Level {self.get_user(interaction.user.id)['level']}!**",
+                        inline=False,
+                    )
+                embed.set_image(url="https://media.discordapp.net/attachments/1308048258337345609/1435509129136439428/nope-anime.gif")
+                embed.set_footer(text=f"🕐 Cooldown: {config.get('knockout_cooldown', 900)//60} min")
+                return await interaction.followup.send(embed=embed)
 
             self.deathlog[str(member.id)] = {
                 "by": interaction.user.id,
@@ -380,8 +382,12 @@ class Knockout(commands.Cog):
                 pass
 
     @app_commands.command(name="revive", description="Attempt to revive (clear timeout) for a knocked-out user.")
-    @command_enabled()
     async def revivecmd(self, interaction: discord.Interaction, member: discord.Member):
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can only be used in a server.", ephemeral=True
+            )
+
         await interaction.response.defer(thinking=True)
 
         # Cooldown

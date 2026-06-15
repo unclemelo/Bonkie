@@ -8,9 +8,7 @@ A Discord bot for server-wide knockout battles. Players use slash commands to kn
 
 - **Knockout battles** — Random weapons, hit/miss/crit outcomes, and configurable timeouts
 - **Revive system** — Clear game-applied timeouts and earn XP; moderator timeouts are protected
-- **Royal stats** — Kills, deaths, revives, K/D ratio, XP, levels (max 15), and a prestige system with tiers
-- **Leaderboards** — Top players sorted by kills, level, prestige, or XP
-- **Per-server command toggles** — Enable or disable commands per guild via `guildConf.json`
+- **Stats & leaderboards** — Global kills, deaths, revives, K/D ratio, XP, levels (max 15), prestige tiers, and worldwide rankings
 - **Booster cooldowns** — Nitro boosters get a 30% shorter cooldown on knockout and revive
 - **Error reporting** — Unexpected errors are logged locally and optionally sent to a Discord webhook
 - **Developer tools** — Git pull, dependency sync, cog reload, and restart commands (role-restricted)
@@ -19,10 +17,11 @@ A Discord bot for server-wide knockout battles. Players use slash commands to kn
 
 | Command | Description |
 |---|---|
-| `/knockout <member>` | Knock out a member with a random weapon. Cannot target users in voice channels or already timed out. |
+| `/knockout <member>` | Knock out a member with a random weapon. Cannot target users in voice channels or already timed out. Protected members still award stats. |
 | `/revive <member>` | Attempt to revive a knocked-out member. Only works for timeouts applied by the game. |
-| `/royalstats [member]` | View Royal stats, XP progress, and prestige. Shows a prestige button at max level. |
-| `/royalleaderboard [sort_by]` | View the top 10 players. Sort by `kills`, `level`, `prestige`, or `xp`. |
+| `/stats [member]` | View global knockout stats, XP progress, and prestige. Works in DMs. Shows a prestige button at max level. |
+| `/leaderboard [sort_by]` | View the global top 10 players across all servers. Sort by `kills`, `level`, `prestige`, or `xp`. |
+| `/help` | Show command help and support links. |
 | `/update` | Pull latest code from GitHub, sync dependencies, and restart. *(Developers only)* |
 | `/update_commits` | View the 5 most recent commits. *(Developers only)* |
 | `/update_test` | Fetch and show git status without restarting. *(Developers only)* |
@@ -77,9 +76,19 @@ WEBHOOK=https://discord.com/api/webhooks/...   # optional — error notification
 
 ### 3. Run the bot
 
+**Windows (recommended):**
+
+```cmd
+run.bat
+```
+
+**Manual start:**
+
 ```bash
 uv run python bot.py
 ```
+
+**Windows CMD:** If emoji still look garbled, use `run.bat` instead of starting Python directly. It sets UTF-8 before launch. [Windows Terminal](https://aka.ms/terminal) also works better than legacy CMD.
 
 On startup, Bonkie loads all cogs from `cogs/`, syncs slash commands, and begins rotating status messages.
 
@@ -90,16 +99,15 @@ Bonkie/
 ├── bot.py                  # Entry point — bot client, cog loader, status loop
 ├── cogs/
 │   ├── knockout.py         # /knockout and /revive game logic
-│   ├── royal_stats.py      # /royalstats and /royalleaderboard
+│   ├── stats.py            # /stats and /leaderboard
+│   ├── help.py             # /help command and support links
 │   ├── error_handler.py    # Global slash-command and uncaught error handling
 │   └── updater.py          # Developer update/reload commands
 ├── utils/
-│   ├── command_checks.py   # Per-guild command enable/disable decorators
 │   └── booster_cooldown.py # Cooldown manager with Nitro booster discount
 ├── data/
 │   ├── weapons.json        # Weapon definitions (timeouts, GIFs, flavor text)
 │   ├── royale_config.json  # Knockout and revive cooldown durations (seconds)
-│   ├── guildConf.json      # Per-server command configuration
 │   ├── royal_stats.json    # Player stats (created at runtime, gitignored)
 │   └── deathlog.json       # Active knockout tracking (created at runtime, gitignored)
 ├── pyproject.toml
@@ -119,14 +127,6 @@ Bonkie/
 ### Weapons (`data/weapons.json`)
 
 Each weapon entry defines a title, timeout duration (seconds or list), XP multiplier, GIF URL, and flavor text for hit, crit, and miss outcomes. The `garande_hug` weapon has a lower selection weight. The `nuke` weapon is excluded from random selection.
-
-### Per-server commands (`data/guildConf.json`)
-
-Guild entries under `Servers` can toggle individual commands. The `command_checks` utilities support three categories:
-
-- **General** — top-level command name keys (enabled by default)
-- **DevOnly** — restrict commands to bot developers
-- **UnderMaintenance** — temporarily disable commands
 
 ### Developer role
 
@@ -149,7 +149,7 @@ Update commands in `cogs/updater.py` check for `DEV_ROLE_ID`. Set this to your s
 
 **Progression**
 
-- Max level is 15. At max level, players can prestige via the button on `/royalstats`.
+- Max level is 15. At max level, players can prestige via the button on `/stats`.
 - Prestige tiers: Bronze, Silver, Gold, Platinum, Diamond, Mythic (every 2 prestiges).
 - Prestiging resets level and XP but keeps kill/death/revive stats.
 

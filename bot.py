@@ -5,7 +5,9 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from colorama import Fore, Style, init
 from datetime import datetime
+from utils.console import configure_console_encoding
 
+configure_console_encoding()
 init(autoreset=True)
 
 # ──────────────────────────────────────────────
