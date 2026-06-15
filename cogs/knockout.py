@@ -7,6 +7,7 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from datetime import datetime, timedelta
 from utils.booster_cooldown import BoosterCooldownManager
+from utils.cooldown_message import cooldown_embed
 from utils.files import read_json, write_json
 
 # === Configuration ===
@@ -230,15 +231,14 @@ class Knockout(commands.Cog):
                 "This command can only be used in a server.", ephemeral=True
             )
 
-        await interaction.response.defer(thinking=True, ephemeral=False)
-
-        # Cooldown
         remaining = await cooldown_knockout.get_remaining(interaction)
         if remaining > 0:
-            return await interaction.followup.send(
-                f"⏳ Slow down! Try again in **{round(remaining, 1)}s**.",
-                ephemeral=True
+            return await interaction.response.send_message(
+                embed=cooldown_embed("knockout", remaining),
+                ephemeral=True,
             )
+
+        await interaction.response.defer(thinking=True, ephemeral=False)
         await cooldown_knockout.trigger(interaction)
 
         # Auto-select a target if none given
@@ -380,12 +380,14 @@ class Knockout(commands.Cog):
                 "This command can only be used in a server.", ephemeral=True
             )
 
-        await interaction.response.defer(thinking=True)
-
-        # Cooldown
         remaining = await cooldown_revive.get_remaining(interaction)
         if remaining > 0:
-            return await interaction.followup.send(f"⏳ Slow down! Try again in **{round(remaining,1)}s**.", ephemeral=True)
+            return await interaction.response.send_message(
+                embed=cooldown_embed("revive", remaining),
+                ephemeral=True,
+            )
+
+        await interaction.response.defer(thinking=True)
         await cooldown_revive.trigger(interaction)
 
         # Choose target if not provided: pick a random deathlog entry present in this guild
