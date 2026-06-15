@@ -44,26 +44,32 @@ def log(msg: str, level: str = "info"):
     print(f"{Fore.BLACK}[{time}]{Style.RESET_ALL} {tag} {Fore.WHITE}{msg}{Style.RESET_ALL}")
 
 # ──────────────────────────────────────────────
-# Status messages
-status_messages = [
-    "🍋 | I'm a goofer. :3",
-    "⚙️ | Type /help for commands!"
-]
+# Status rotation
 status_index = 0
 
-@tasks.loop(seconds=10)
+def build_status_messages(guild_count: int, latency_ms: int) -> list[str]:
+    ping = "999+ms" if latency_ms > 999 else f"{latency_ms}ms"
+    server_label = f"{guild_count} server" if guild_count == 1 else f"{guild_count} servers"
+    return [
+        "/knockout | /revive",
+        "/stats | /leaderboard",
+        "/help for commands",
+        server_label,
+        f"ping: {ping}",
+    ]
+
+@tasks.loop(seconds=15)
 async def update_status_loop():
     global status_index
 
     try:
         guild_count = len(client.guilds)
         latency = round(client.latency * 1000)
-        latency_message = "📡 | Ping: 999+ms" if latency > 999 else f"📡 | Ping: {latency}ms"
-        all_statuses = status_messages + [latency_message]
-        current = all_statuses[status_index % len(all_statuses)].format(guild_count=guild_count)
+        statuses = build_status_messages(guild_count, latency)
+        current = statuses[status_index % len(statuses)]
         status_index += 1
         await client.change_presence(
-            status=discord.Status.dnd,
+            status=discord.Status.online,
             activity=discord.Activity(type=discord.ActivityType.watching, name=current)
         )
     except Exception as e:
