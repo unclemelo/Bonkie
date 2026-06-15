@@ -333,32 +333,6 @@ class Knockout(commands.Cog):
             self.add_kill(interaction.user.id)
             self.add_death(member.id)
 
-            if not ok:
-                embed.title = "🚫 Target Protected!"
-                embed.description = (
-                    f"{interaction.user.mention} landed a hit on {member.mention}, "
-                    f"but they're protected and couldn't be timed out!\n"
-                    f"> {random.choice(weapon.get('lines', ['Hit!']))}"
-                )
-                embed.add_field(name="🏅 XP Gained", value=f"**+{xp_gain} XP**", inline=False)
-                if leveled:
-                    embed.add_field(
-                        name="🆙 Level Up!",
-                        value=f"{interaction.user.mention} reached **Level {self.get_user(interaction.user.id)['level']}!**",
-                        inline=False,
-                    )
-                embed.set_image(url="https://media.discordapp.net/attachments/1308048258337345609/1435509129136439428/nope-anime.gif")
-                embed.set_footer(text=f"🕐 Cooldown: {config.get('knockout_cooldown', 900)//60} min")
-                return await interaction.followup.send(embed=embed)
-
-            self.deathlog[str(member.id)] = {
-                "by": interaction.user.id,
-                "weapon": weapon_key,
-                "timeout_end": (now + timedelta(seconds=duration)).isoformat(),
-                "crit": crit
-            }
-            self.save_deathlog()
-
             embed.description = (
                 f"🔥 **CRITICAL HIT!** {interaction.user.mention} obliterated {member.mention} with **{weapon_key}!**\n"
                 f"> {random.choice(weapon.get('crit_lines', ['Critical hit!']))}"
@@ -369,9 +343,27 @@ class Knockout(commands.Cog):
 
             embed.add_field(name="🏅 XP Gained", value=f"**+{xp_gain} XP**", inline=False)
             if leveled:
-                embed.add_field(name="🆙 Level Up!", value=f"{interaction.user.mention} reached **Level {self.get_user(interaction.user.id)['level']}!**", inline=False)
+                embed.add_field(
+                    name="🆙 Level Up!",
+                    value=f"{interaction.user.mention} reached **Level {self.get_user(interaction.user.id)['level']}!**",
+                    inline=False,
+                )
 
-            embed.set_footer(text=f"🕐 Cooldown: {config.get('knockout_cooldown', 900)//60} min")
+            cooldown_footer = f"🕐 Cooldown: {config.get('knockout_cooldown', 900)//60} min"
+
+            if not ok:
+                embed.set_footer(text=f"Protected target · {cooldown_footer}")
+                return await interaction.followup.send(embed=embed)
+
+            self.deathlog[str(member.id)] = {
+                "by": interaction.user.id,
+                "weapon": weapon_key,
+                "timeout_end": (now + timedelta(seconds=duration)).isoformat(),
+                "crit": crit
+            }
+            self.save_deathlog()
+
+            embed.set_footer(text=cooldown_footer)
             await interaction.followup.send(embed=embed)
 
         except Exception as e:
