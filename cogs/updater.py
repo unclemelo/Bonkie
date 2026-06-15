@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 
 GITHUB_REPO = "https://github.com/unclemelo/Bonkie"
-DEV_ROLE_ID = 1461982214215569482
+DEV_ROLE_ID = 954135885392252940
 
 
 @dataclass(slots=True)
