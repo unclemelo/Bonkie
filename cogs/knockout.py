@@ -6,7 +6,7 @@ from typing import Any, Optional
 from discord.ext import commands, tasks
 from discord import app_commands
 from datetime import datetime, timedelta
-from utils.booster_cooldown import BoosterCooldownManager
+from utils.booster_cooldown import BoosterCooldownManager, format_cooldown_footer
 from utils.cooldown_message import cooldown_embed
 from utils.files import read_json, write_json
 
@@ -300,7 +300,7 @@ class Knockout(commands.Cog):
                 f"😅 {interaction.user.mention} missed {member.mention}!\n"
                 f"> {random.choice(weapon.get('miss_lines', ['They missed!']))}"
             )
-            embed.set_footer(text=f"🕐 Cooldown: {config.get('knockout_cooldown', 1800)//60} min")
+            embed.set_footer(text=format_cooldown_footer(interaction, cooldown_knockout))
             return await interaction.followup.send(embed=embed)
 
         # Critical or normal hit
@@ -349,7 +349,7 @@ class Knockout(commands.Cog):
                     inline=False,
                 )
 
-            cooldown_footer = f"🕐 Cooldown: {config.get('knockout_cooldown', 900)//60} min"
+            cooldown_footer = format_cooldown_footer(interaction, cooldown_knockout)
 
             if not ok:
                 embed.set_footer(text=f"Protected target · {cooldown_footer}")
@@ -448,6 +448,7 @@ class Knockout(commands.Cog):
         embed.add_field(name="🏅 XP Gained", value=f"+{xp_gain} XP", inline=False)
         if leveled:
             embed.add_field(name="🆙 Level Up!", value=f"{interaction.user.mention} reached Level {self.get_user(interaction.user.id)['level']}!", inline=False)
+        embed.set_footer(text=format_cooldown_footer(interaction, cooldown_revive))
         await interaction.followup.send(embed=embed)
 
 

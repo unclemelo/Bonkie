@@ -37,6 +37,9 @@ class BoosterCooldownManager:
             return self.per * BOOSTER_COOLDOWN_MULTIPLIER
         return self.per
 
+    def get_period(self, interaction: discord.Interaction) -> float:
+        return self._cooldown_period(interaction)
+
     async def get_remaining(self, interaction: discord.Interaction) -> float:
         key = self._get_key(interaction)
         now = time.time()
@@ -54,3 +57,12 @@ class BoosterCooldownManager:
         key = self._get_key(interaction)
         now = time.time()
         self.cooldowns.setdefault(key, []).append(now)
+
+
+def format_cooldown_footer(interaction: discord.Interaction, manager: BoosterCooldownManager) -> str:
+    seconds = manager.get_period(interaction)
+    minutes = max(1, round(seconds / 60))
+    footer = f"🕐 Cooldown: {minutes} min"
+    if is_booster_in_guild(interaction):
+        footer += " · Server booster"
+    return footer
