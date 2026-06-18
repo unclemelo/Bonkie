@@ -46,7 +46,8 @@ class Help(commands.Cog):
             value=(
                 "• You can't knock out someone already timed out or in a voice channel.\n"
                 "• Reach level 15 to unlock prestige from `/stats`.\n"
-                "• Knockout and revive commands have cooldowns between uses."
+                "• Knockout and revive commands have cooldowns between uses.\n"
+                "• Server boosters in the current server get half the normal cooldown on knockout and revive."
             ),
             inline=False,
         )

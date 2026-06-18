@@ -9,7 +9,7 @@ A Discord bot for server-wide knockout battles. Players use slash commands to kn
 - **Knockout battles** — Random weapons, hit/miss/crit outcomes, and configurable timeouts
 - **Revive system** — Clear game-applied timeouts and earn XP; moderator timeouts are protected
 - **Stats & leaderboards** — Global kills, deaths, revives, K/D ratio, XP, levels (max 15), prestige tiers, and worldwide rankings
-- **Booster cooldowns** — Nitro boosters get a 30% shorter cooldown on knockout and revive
+- **Booster cooldowns** — Users boosting the current server get half the normal knockout and revive cooldown
 - **Terminal logging** — Errors print cleanly in the console when running the bot locally
 
 ## Commands

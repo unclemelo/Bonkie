@@ -2,13 +2,25 @@ import discord
 import time
 from typing import Literal
 
-def support_server_id(interaction: discord.Interaction) -> int:
-    return interaction.user.id
-
 BUCKET_TYPES = {
     "user": lambda interaction: interaction.user.id,
     "guild": lambda interaction: interaction.guild.id if interaction.guild else interaction.user.id,
 }
+
+BOOSTER_COOLDOWN_MULTIPLIER = 0.5
+
+
+def is_booster_in_guild(interaction: discord.Interaction) -> bool:
+    """Return True if the user is boosting the server where the command was used."""
+    if interaction.guild is None:
+        return False
+
+    member = interaction.user if isinstance(interaction.user, discord.Member) else interaction.guild.get_member(interaction.user.id)
+    if member is None:
+        return False
+
+    return member.premium_since is not None
+
 
 class BoosterCooldownManager:
     def __init__(self, rate: int, per: float, bucket_type: Literal["user", "guild"] = "user"):
@@ -20,24 +32,23 @@ class BoosterCooldownManager:
     def _get_key(self, interaction: discord.Interaction):
         return BUCKET_TYPES[self.bucket_type](interaction)
 
+    def _cooldown_period(self, interaction: discord.Interaction) -> float:
+        if is_booster_in_guild(interaction):
+            return self.per * BOOSTER_COOLDOWN_MULTIPLIER
+        return self.per
+
     async def get_remaining(self, interaction: discord.Interaction) -> float:
         key = self._get_key(interaction)
         now = time.time()
-
-        # Get member for booster check
-        guild = interaction.client.get_guild(support_server_id(interaction))
-        member = guild.get_member(interaction.user.id) if guild else None
-        cooldown_period = self.per * 0.7 if member and member.premium_since else self.per
+        cooldown_period = self._cooldown_period(interaction)
 
         timestamps = self.cooldowns.get(key, [])
-        # Filter timestamps still within cooldown period
         valid = [t for t in timestamps if now - t < cooldown_period]
         self.cooldowns[key] = valid
 
         if len(valid) >= self.rate:
             return cooldown_period - (now - valid[0])
-        else:
-            return 0.0
+        return 0.0
 
     async def trigger(self, interaction: discord.Interaction):
         key = self._get_key(interaction)
